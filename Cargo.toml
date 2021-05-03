@@ -1,0 +1,10 @@
+[package]
+name = "nuisance-value"
+version = "0.1.0"
+authors = ["Ninjapiraatti <tuoppil@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = "0.5"
