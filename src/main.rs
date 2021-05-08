@@ -182,6 +182,27 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
         .insert(PlayerHead);
 }
 
+// Move player
+fn player_movement(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut head_positions: Query<&mut Transform, With<PlayerHead>>,
+) {
+    for mut transform in head_positions.iter_mut() {
+        if keyboard_input.pressed(KeyCode::Left) {
+            transform.translation.x -= 2.;
+        }
+        if keyboard_input.pressed(KeyCode::Right) {
+            transform.translation.x += 2.;
+        }
+        if keyboard_input.pressed(KeyCode::Down) {
+            transform.translation.y -= 2.;
+        }
+        if keyboard_input.pressed(KeyCode::Up) {
+            transform.translation.y += 2.;
+        }
+    }
+}
+
 // If you really need full, immediate read/write access to the world or resources, you can use a
 // "thread local system". These run on the main app thread (hence the name "thread local")
 // WARNING: These will block all parallel execution of other systems until they finish, so they
@@ -263,6 +284,8 @@ fn main() {
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
 		.add_startup_system(startup_system.system())
+		// Add game setup to stage
+		.add_startup_stage("game_setup", SystemStage::single(spawn_player.system()))
 		// SYSTEM EXECUTION ORDER
 		//
 		// Each system belongs to a `Stage`, which controls the execution strategy and broad order
@@ -326,6 +349,7 @@ fn main() {
 			MyStage::AfterRound,
 			keyboard_input_system.system().after(MyLabels::ScoreCheck),
 		)
+		.add_system(player_movement.system())
 		.add_plugins(DefaultPlugins)
 		.insert_resource(ReportExecutionOrderAmbiguities)
 		// This call to run() starts the app we just built!
