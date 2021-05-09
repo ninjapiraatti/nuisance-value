@@ -1,4 +1,5 @@
 use bevy::{
+	core::FixedTimestep,
 	app::{AppExit, ScheduleRunnerPlugin, ScheduleRunnerSettings},
 	ecs::schedule::ReportExecutionOrderAmbiguities,
 	input::{keyboard::KeyCode, Input},
@@ -33,6 +34,32 @@ impl Size {
     }
 }
 
+#[derive(PartialEq, Copy, Clone)]
+enum Direction {
+    Left,
+    Up,
+    Right,
+    Down,
+}
+
+#[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum PlayerMovement {
+    Input,
+    Movement,
+    Growth,
+}
+
+impl Direction {
+    fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+        }
+    }
+}
+
 struct Score {
 	value: usize,
 }
@@ -45,7 +72,9 @@ struct GameState {
 	winning_player: Option<String>,
 }
 
-struct PlayerHead;
+struct PlayerHead {
+	direction: Direction,
+}
 struct Materials {
 	head_material: Handle<ColorMaterial>,
 }
@@ -226,29 +255,47 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
             sprite: Sprite::new(Vec2::new(10.0, 10.0)),
             ..Default::default()
         })
-        .insert(PlayerHead)
+        .insert(PlayerHead {direction: Direction::Up})
 		.insert(Position { x: 3, y: 3 })
 		.insert(Size::square(0.8));
 }
 
 // Move player
-fn player_movement(
-    keyboard_input: Res<Input<KeyCode>>,
-    mut head_positions: Query<&mut Position, With<PlayerHead>>,
-) {
-    for mut pos in head_positions.iter_mut() {
-        if keyboard_input.pressed(KeyCode::Left) {
-            pos.x -= 2;
+fn player_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&mut PlayerHead>) {
+    if let Some(mut head) = heads.iter_mut().next() {
+        let dir: Direction = if keyboard_input.pressed(KeyCode::Left) {
+            Direction::Left
+        } else if keyboard_input.pressed(KeyCode::Down) {
+            Direction::Down
+        } else if keyboard_input.pressed(KeyCode::Up) {
+            Direction::Up
+        } else if keyboard_input.pressed(KeyCode::Right) {
+            Direction::Right
+        } else {
+            head.direction
+        };
+        if dir != head.direction.opposite() {
+            head.direction = dir;
         }
-        if keyboard_input.pressed(KeyCode::Right) {
-            pos.x += 2;
-        }
-        if keyboard_input.pressed(KeyCode::Down) {
-            pos.y -= 2;
-        }
-        if keyboard_input.pressed(KeyCode::Up) {
-            pos.y += 2;
-        }
+    }
+}
+
+fn player_movement(mut heads: Query<(&mut Position, &PlayerHead)>) {
+    if let Some((mut head_pos, head)) = heads.iter_mut().next() {
+        match &head.direction {
+            Direction::Left => {
+                head_pos.x -= 1;
+            }
+            Direction::Right => {
+                head_pos.x += 1;
+            }
+            Direction::Up => {
+                head_pos.y += 1;
+            }
+            Direction::Down => {
+                head_pos.y -= 1;
+            }
+        };
     }
 }
 
@@ -407,7 +454,17 @@ fn main() {
 			MyStage::AfterRound,
 			keyboard_input_system.system().after(MyLabels::ScoreCheck),
 		)
-		.add_system(player_movement.system())
+		.add_system(
+			player_movement_input
+				.system()
+				.label(PlayerMovement::Input)
+				.before(PlayerMovement::Movement),
+		)
+		.add_system_set(
+			SystemSet::new()
+				.with_run_criteria(FixedTimestep::step(0.150))
+				.with_system(player_movement.system().label(PlayerMovement::Movement)),
+		)
 		.add_system_set_to_stage(
 			CoreStage::PostUpdate,
 			SystemSet::new()
