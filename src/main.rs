@@ -8,8 +8,29 @@ use bevy::{
 };
 use rand::random;
 
+const ARENA_WIDTH: u32 = 100;
+const ARENA_HEIGHT: u32 = 100;
+
 struct Player {
 	name: String,
+}
+#[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
+struct Position {
+    x: i32,
+    y: i32,
+}
+
+struct Size {
+    width: f32,
+    height: f32,
+}
+impl Size {
+    pub fn square(x: f32) -> Self {
+        Self {
+            width: x,
+            height: x,
+        }
+    }
 }
 
 struct Score {
@@ -77,6 +98,32 @@ fn score_system(mut query: Query<(&Player, &mut Score)>) {
 			);
 		}
 	}
+}
+
+// Scaling sprites
+fn size_scaling(windows: Res<Windows>, mut q: Query<(&Size, &mut Sprite)>) {
+    let window = windows.get_primary().unwrap();
+    for (sprite_size, mut sprite) in q.iter_mut() {
+        sprite.size = Vec2::new(
+            sprite_size.width / ARENA_WIDTH as f32 * window.width() as f32,
+            sprite_size.height / ARENA_HEIGHT as f32 * window.height() as f32,
+        );
+    }
+}
+
+fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Transform)>) {
+    fn convert(pos: f32, bound_window: f32, bound_game: f32) -> f32 {
+        let tile_size = bound_window / bound_game;
+        pos / bound_game * bound_window - (bound_window / 2.) + (tile_size / 2.)
+    }
+    let window = windows.get_primary().unwrap();
+    for (pos, mut transform) in q.iter_mut() {
+        transform.translation = Vec3::new(
+            convert(pos.x as f32, window.width() as f32, ARENA_WIDTH as f32),
+            convert(pos.y as f32, window.height() as f32, ARENA_HEIGHT as f32),
+            0.0,
+        );
+    }
 }
 
 // This system runs on all entities with the "Player" and "Score" components, but it also
@@ -179,26 +226,28 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
             sprite: Sprite::new(Vec2::new(10.0, 10.0)),
             ..Default::default()
         })
-        .insert(PlayerHead);
+        .insert(PlayerHead)
+		.insert(Position { x: 3, y: 3 })
+		.insert(Size::square(0.8));
 }
 
 // Move player
 fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
-    mut head_positions: Query<&mut Transform, With<PlayerHead>>,
+    mut head_positions: Query<&mut Position, With<PlayerHead>>,
 ) {
-    for mut transform in head_positions.iter_mut() {
+    for mut pos in head_positions.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= 2.;
+            pos.x -= 2;
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += 2.;
+            pos.x += 2;
         }
         if keyboard_input.pressed(KeyCode::Down) {
-            transform.translation.y -= 2.;
+            pos.y -= 2;
         }
         if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += 2.;
+            pos.y += 2;
         }
     }
 }
@@ -270,8 +319,17 @@ fn main() {
 	// Bevy apps are created using the builder pattern. We use the builder to add systems,
 	// resources, and plugins to our app
 	App::build()
+		// Resize and rename window
+		.insert_resource(WindowDescriptor { // <--
+            title: "Nuisance Value".to_string(), // <--
+            width: 500.0,                 // <--
+            height: 500.0,                // <--
+            ..Default::default()         // <--
+        })
 		// Resources can be added to our app like this
 		.insert_resource(State { counter: 0 })
+		// Change colors
+		.insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
 		// Some systems are configured by adding their settings as a resource
 		.insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
 		// Plugins are just a grouped set of app builder calls (just like we're doing here).
@@ -350,6 +408,12 @@ fn main() {
 			keyboard_input_system.system().after(MyLabels::ScoreCheck),
 		)
 		.add_system(player_movement.system())
+		.add_system_set_to_stage(
+			CoreStage::PostUpdate,
+			SystemSet::new()
+				.with_system(position_translation.system())
+				.with_system(size_scaling.system()),
+		)
 		.add_plugins(DefaultPlugins)
 		.insert_resource(ReportExecutionOrderAmbiguities)
 		// This call to run() starts the app we just built!
