@@ -21,6 +21,16 @@ struct Position {
     y: i32,
 }
 
+struct PlayerSegment;
+
+struct GrowthEvent;
+
+#[derive(Default)]
+struct PlayerSegments(Vec<Entity>);
+
+#[derive(Default)]
+struct LastTailPosition(Option<Position>);
+
 struct Size {
     width: f32,
     height: f32,
@@ -77,6 +87,7 @@ struct PlayerHead {
 }
 struct Materials {
 	head_material: Handle<ColorMaterial>,
+	segment_material: Handle<ColorMaterial>,
 }
 
 struct GameRules {
@@ -219,6 +230,7 @@ fn startup_system(
 	commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 	commands.insert_resource(Materials {
         head_material: materials.add(Color::rgb(0.1, 0.9, 0.9).into()),
+		segment_material: materials.add(Color::rgb(0.1, 0.7, 0.7).into())
     });
 	game_state.total_players = 2;
 }
@@ -248,16 +260,31 @@ fn new_player_system(
 }
 
 // Spawn new tron player
-fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
-    commands
-        .spawn_bundle(SpriteBundle {
-            material: materials.head_material.clone(),
-            sprite: Sprite::new(Vec2::new(10.0, 10.0)),
-            ..Default::default()
-        })
-        .insert(PlayerHead {direction: Direction::Up})
-		.insert(Position { x: 3, y: 3 })
-		.insert(Size::square(0.8));
+fn spawn_player(
+    mut commands: Commands,
+    materials: Res<Materials>,
+    mut segments: ResMut<PlayerSegments>,
+) {
+    segments.0 = vec![
+        commands
+            .spawn_bundle(SpriteBundle {
+                material: materials.head_material.clone(),
+                sprite: Sprite::new(Vec2::new(10.0, 10.0)),
+                ..Default::default()
+            })
+            .insert(PlayerHead {
+                direction: Direction::Up,
+            })
+            .insert(PlayerSegment)
+            .insert(Position { x: 3, y: 3 })
+            .insert(Size::square(0.8))
+            .id(),
+        spawn_segment(
+            commands,
+            &materials.segment_material,
+            Position { x: 3, y: 2 },
+        ),
+    ];
 }
 
 // Move player
@@ -280,8 +307,18 @@ fn player_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&
     }
 }
 
-fn player_movement(mut heads: Query<(&mut Position, &PlayerHead)>) {
-    if let Some((mut head_pos, head)) = heads.iter_mut().next() {
+fn player_movement(
+    segments: ResMut<PlayerSegments>,
+    mut heads: Query<(Entity, &PlayerHead)>,
+    mut positions: Query<&mut Position>,
+) {
+    if let Some((head_entity, head)) = heads.iter_mut().next() {
+        let segment_positions = segments
+            .0
+            .iter()
+            .map(|e| *positions.get_mut(*e).unwrap())
+            .collect::<Vec<Position>>();
+        let mut head_pos = positions.get_mut(head_entity).unwrap();
         match &head.direction {
             Direction::Left => {
                 head_pos.x -= 1;
@@ -296,7 +333,51 @@ fn player_movement(mut heads: Query<(&mut Position, &PlayerHead)>) {
                 head_pos.y -= 1;
             }
         };
+        segment_positions
+            .iter()
+            .zip(segments.0.iter().skip(1))
+            .for_each(|(pos, segment)| {
+                *positions.get_mut(*segment).unwrap() = *pos;
+            });
     }
+}
+
+fn player_growth(
+    commands: Commands,
+    head_positions: Query<&Position, With<PlayerHead>>,
+    mut segments: ResMut<PlayerSegments>,
+    materials: Res<Materials>,
+) {
+	/*
+	for head_pos in head_positions.iter() {
+		segments.0.push(spawn_segment( // This would add the tail always to the same player
+            commands,
+            &materials.segment_material,
+            head_pos.clone().into(),
+        ));
+    }
+	*/
+	segments.0.push(spawn_segment( // This would add the tail always to the same player
+		commands,
+		&materials.segment_material,
+		head_positions.single().unwrap().clone().into(),
+	));
+}
+
+fn spawn_segment(
+    mut commands: Commands,
+    material: &Handle<ColorMaterial>,
+    position: Position,
+) -> Entity {
+    commands
+        .spawn_bundle(SpriteBundle {
+            material: material.clone(),
+            ..Default::default()
+        })
+        .insert(PlayerSegment)
+        .insert(position)
+        .insert(Size::square(0.65))
+        .id()
 }
 
 // If you really need full, immediate read/write access to the world or resources, you can use a
@@ -377,6 +458,9 @@ fn main() {
 		.insert_resource(State { counter: 0 })
 		// Change colors
 		.insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
+		// Player tails
+		.insert_resource(PlayerSegments::default())
+		.insert_resource(LastTailPosition::default())
 		// Some systems are configured by adding their settings as a resource
 		.insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
 		// Plugins are just a grouped set of app builder calls (just like we're doing here).
@@ -389,6 +473,8 @@ fn main() {
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
 		.add_startup_system(startup_system.system())
+		// Add tail event
+		.add_event::<GrowthEvent>()
 		// Add game setup to stage
 		.add_startup_stage("game_setup", SystemStage::single(spawn_player.system()))
 		// SYSTEM EXECUTION ORDER
@@ -463,7 +549,13 @@ fn main() {
 		.add_system_set(
 			SystemSet::new()
 				.with_run_criteria(FixedTimestep::step(0.150))
-				.with_system(player_movement.system().label(PlayerMovement::Movement)),
+				.with_system(player_movement.system().label(PlayerMovement::Movement))
+				.with_system(
+					player_growth
+						.system()
+						.label(PlayerMovement::Growth)
+						.after(PlayerMovement::Movement),
+				)
 		)
 		.add_system_set_to_stage(
 			CoreStage::PostUpdate,
