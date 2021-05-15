@@ -14,6 +14,7 @@ const ARENA_HEIGHT: u32 = 100;
 
 struct Player {
 	name: String,
+	head: PlayerHead,
 }
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
 struct Position {
@@ -109,20 +110,6 @@ fn new_round_system(game_rules: Res<GameRules>, mut game_state: ResMut<GameState
 	);
 }
 
-fn keyboard_input_system(keyboard_input: Res<Input<KeyCode>>) {
-	if keyboard_input.pressed(KeyCode::A) {
-		info!("'A' currently pressed");
-	}
-
-	if keyboard_input.just_pressed(KeyCode::A) {
-		info!("'A' just pressed");
-	}
-
-	if keyboard_input.just_released(KeyCode::A) {
-		info!("'A' just released");
-	}
-}
-
 // This system updates the score for each entity with the "Player" and "Score" component.
 fn score_system(mut query: Query<(&Player, &mut Score)>) {
 	for (player, mut score) in query.iter_mut() {
@@ -210,20 +197,22 @@ fn startup_system(
 ) {
 	// Create our game rules resource
 	commands.insert_resource(GameRules {
-		max_rounds: 100000,
-		winning_score: 40000,
+		max_rounds: 100,
+		winning_score: 51,
 		max_players: 4,
 	});
 	commands.spawn_batch(vec![
 		(
 			Player {
-				name: "Alice".to_string(),
+				name: "Quorra".to_string(),
+				head: PlayerHead {direction: Direction::Up},
 			},
 			Score { value: 0 },
 		),
 		(
 			Player {
-				name: "Bob".to_string(),
+				name: "Clu".to_string(),
+				head: PlayerHead {direction: Direction::Down},
 			},
 			Score { value: 0 },
 		),
@@ -253,6 +242,7 @@ fn new_player_system(
 		commands.spawn_bundle((
 			Player {
 				name: format!("Player {}", game_state.total_players),
+				head: PlayerHead {direction: Direction::Down},
 			},
 			Score { value: 0 },
 		));
@@ -401,33 +391,6 @@ fn game_over(
     }
 }
 
-// If you really need full, immediate read/write access to the world or resources, you can use a
-// "thread local system". These run on the main app thread (hence the name "thread local")
-// WARNING: These will block all parallel execution of other systems until they finish, so they
-// should generally be avoided if you care about performance
-#[allow(dead_code)]
-fn thread_local_system(world: &mut World) {
-	// this does the same thing as "new_player_system"
-	let total_players = world.get_resource_mut::<GameState>().unwrap().total_players;
-	let should_add_player = {
-		let game_rules = world.get_resource::<GameRules>().unwrap();
-		let add_new_player = random::<bool>();
-		add_new_player && total_players < game_rules.max_players
-	};
-	// Randomly add a new player
-	if should_add_player {
-		world.spawn().insert_bundle((
-			Player {
-				name: format!("Player {}", total_players),
-			},
-			Score { value: 0 },
-		));
-
-		let mut game_state = world.get_resource_mut::<GameState>().unwrap();
-		game_state.total_players += 1;
-	}
-}
-
 // Sometimes systems need their own unique "local" state. Bevy's ECS provides Local<T> resources for
 // this case. Local<T> resources are unique to their system and are automatically initialized on
 // your behalf (if they don't already exist). If you have a system's id, you can also access local
@@ -531,7 +494,9 @@ fn main() {
 		// add_system(system) adds systems to the UPDATE stage by default
 		// However we can manually specify the stage if we want to. The following is equivalent to
 		// add_system(score_system)
-		.add_system_to_stage(CoreStage::Update, score_system.system())
+
+		//.add_system_to_stage(CoreStage::Update, score_system.system())
+
 		// We can also create new stages. Here is what our games stage order will look like:
 		// "before_round": new_player_system, new_round_system
 		// "update": print_message_system, score_system
@@ -546,8 +511,10 @@ fn main() {
 			MyStage::AfterRound,
 			SystemStage::parallel(),
 		)
-		.add_system_to_stage(MyStage::BeforeRound, new_round_system.system())
-		.add_system_to_stage(MyStage::BeforeRound, new_player_system.system())
+		
+		//.add_system_to_stage(MyStage::BeforeRound, new_round_system.system())
+		//.add_system_to_stage(MyStage::BeforeRound, new_player_system.system())
+
 		// We can ensure that game_over system runs after score_check_system using explicit ordering
 		// constraints First, we label the system we want to refer to using `.label`
 		// Then, we use either `.before` or `.after` to describe the order we want the relationship
@@ -558,10 +525,6 @@ fn main() {
 		.add_system_to_stage(
 			MyStage::AfterRound,
 			game_over_system.system().after(MyLabels::ScoreCheck),
-		)
-		.add_system_to_stage(
-			MyStage::AfterRound,
-			keyboard_input_system.system().after(MyLabels::ScoreCheck),
 		)
 		.add_system(
 			player_movement_input
