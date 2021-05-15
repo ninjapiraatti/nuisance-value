@@ -25,6 +25,8 @@ struct PlayerSegment;
 
 struct GrowthEvent;
 
+struct GameOverEvent;
+
 #[derive(Default)]
 struct PlayerSegments(Vec<Entity>);
 
@@ -311,6 +313,7 @@ fn player_movement(
     segments: ResMut<PlayerSegments>,
     mut heads: Query<(Entity, &PlayerHead)>,
     mut positions: Query<&mut Position>,
+	mut game_over_writer: EventWriter<GameOverEvent>,
 ) {
     if let Some((head_entity, head)) = heads.iter_mut().next() {
         let segment_positions = segments
@@ -333,6 +336,16 @@ fn player_movement(
                 head_pos.y -= 1;
             }
         };
+		if segment_positions.contains(&head_pos) {
+			game_over_writer.send(GameOverEvent);
+		}
+		if head_pos.x < 0
+			|| head_pos.y < 0
+			|| head_pos.x as u32 >= ARENA_WIDTH
+			|| head_pos.y as u32 >= ARENA_HEIGHT
+		{
+			game_over_writer.send(GameOverEvent);
+		}
         segment_positions
             .iter()
             .zip(segments.0.iter().skip(1))
@@ -348,15 +361,7 @@ fn player_growth(
     mut segments: ResMut<PlayerSegments>,
     materials: Res<Materials>,
 ) {
-	/*
-	for head_pos in head_positions.iter() {
-		segments.0.push(spawn_segment( // This would add the tail always to the same player
-            commands,
-            &materials.segment_material,
-            head_pos.clone().into(),
-        ));
-    }
-	*/
+
 	segments.0.push(spawn_segment( // This would add the tail always to the same player
 		commands,
 		&materials.segment_material,
@@ -378,6 +383,22 @@ fn spawn_segment(
         .insert(position)
         .insert(Size::square(0.65))
         .id()
+}
+
+fn game_over(
+    mut commands: Commands,
+    mut reader: EventReader<GameOverEvent>,
+    materials: Res<Materials>,
+	players: Query<Entity, With<Position>>,
+    segments_res: ResMut<PlayerSegments>,
+    segments: Query<Entity, With<PlayerSegment>>,
+) {
+    if reader.iter().next().is_some() {
+		for ent in players.iter().chain(segments.iter()) {
+            commands.entity(ent).despawn();
+        }
+        spawn_player(commands, materials, segments_res); // Before this line delete the player trail
+    }
 }
 
 // If you really need full, immediate read/write access to the world or resources, you can use a
@@ -473,6 +494,8 @@ fn main() {
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
 		.add_startup_system(startup_system.system())
+		// Add Player death
+		.add_event::<GameOverEvent>()
 		// Add tail event
 		.add_event::<GrowthEvent>()
 		// Add game setup to stage
@@ -546,6 +569,7 @@ fn main() {
 				.label(PlayerMovement::Input)
 				.before(PlayerMovement::Movement),
 		)
+		.add_system(game_over.system().before(PlayerMovement::Movement))
 		.add_system_set(
 			SystemSet::new()
 				.with_run_criteria(FixedTimestep::step(0.150))
