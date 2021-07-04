@@ -85,6 +85,14 @@ struct GameState {
 	winning_player: Option<String>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum AppState {
+	MainMenu,
+	InGame,
+	Paused,
+	GameOver
+}
+
 struct PlayerHead {
 	direction: Direction,
 }
