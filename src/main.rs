@@ -60,6 +60,7 @@ pub enum PlayerMovement {
     Input,
     Movement,
     Growth,
+	Spawn,
 }
 
 impl Direction {
@@ -599,12 +600,20 @@ fn main() {
 			SystemSet::on_enter(AppState::MainMenu)
 				.with_system(startup_system.system())
 				.with_system(setup_menu.system())
-				//.with_system(position_translation.system())
-				//.with_system(size_scaling.system())
+				.with_system(position_translation.system())
+				.with_system(size_scaling.system())
 		)
         .add_system_set(SystemSet::on_update(AppState::MainMenu).with_system(menu.system()))
         .add_system_set(SystemSet::on_exit(AppState::MainMenu).with_system(cleanup_menu.system()))
-        .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_player.system()))
+        .add_system_set(
+			SystemSet::on_enter(AppState::InGame)
+				.with_system(
+					spawn_player
+					.system()
+					.label(PlayerMovement::Spawn)
+					.before(PlayerMovement::Movement)
+				)
+		)
 		/*
 		.add_system_set_to_stage(
 			CoreStage::PostUpdate,
@@ -616,7 +625,6 @@ fn main() {
         .add_system_set(
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
-				/*
 				.with_system(
 					player_growth
 					.system()
@@ -628,8 +636,8 @@ fn main() {
 					.system()
 					.label(PlayerMovement::Input)
 					.before(PlayerMovement::Movement),
-				)*/
-				//.with_system(player_movement.system().label(PlayerMovement::Movement))
+				)
+				.with_system(player_movement.system().label(PlayerMovement::Movement))
 
         )
 		.insert_resource(ReportExecutionOrderAmbiguities)
