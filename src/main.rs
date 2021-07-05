@@ -34,11 +34,11 @@ struct PlayerSegments(Vec<Entity>);
 #[derive(Default)]
 struct LastTailPosition(Option<Position>);
 
-struct Size {
+struct BoxSize {
     width: f32,
     height: f32,
 }
-impl Size {
+impl BoxSize {
     pub fn square(x: f32) -> Self {
         Self {
             width: x,
@@ -106,6 +106,9 @@ struct GameRules {
 	max_rounds: usize,
 	max_players: usize,
 }
+struct MenuData {
+    button_entity: Entity,
+}
 
 // SYSTEMS: Logic that runs on entities, components, and resources. These generally run once each
 // time the app updates.
@@ -116,6 +119,85 @@ fn new_round_system(game_rules: Res<GameRules>, mut game_state: ResMut<GameState
 		"Begin round {} of {}",
 		game_state.current_round, game_rules.max_rounds
 	);
+}
+
+// Menu
+fn setup_menu(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    // ui camera
+    commands.spawn_bundle(UiCameraBundle::default());
+    let button_entity = commands
+        .spawn_bundle(ButtonBundle {
+            style: Style {
+                size: Size::new(Val::Px(150.0), Val::Px(65.0)),
+                // center button
+                margin: Rect::all(Val::Auto),
+                // horizontally center child text
+                justify_content: JustifyContent::Center,
+                // vertically center child text
+                align_items: AlignItems::Center,
+                ..Default::default()
+            },
+            //material: button_materials.normal.clone(),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent.spawn_bundle(TextBundle {
+                text: Text::with_section(
+                    "Play",
+                    TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 40.0,
+                        color: Color::rgb(0.9, 0.9, 0.9),
+                    },
+                    Default::default(),
+                ),
+                ..Default::default()
+            });
+        })
+        .id();
+    commands.insert_resource(MenuData { button_entity });
+}
+
+fn menu(
+    mut state: ResMut<State<AppState>>,
+    mut interaction_query: Query<
+        (&Interaction, &mut Handle<ColorMaterial>),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut material) in interaction_query.iter_mut() {
+        match *interaction {
+            Interaction::Clicked => {
+                state.set(AppState::InGame).unwrap();
+            }
+            Interaction::Hovered => {
+				println!("hovered");
+            }
+            Interaction::None => {
+                println!("hovered");
+            }
+        }
+    }
+}
+
+fn cleanup_menu(mut commands: Commands, menu_data: Res<MenuData>) {
+    commands.entity(menu_data.button_entity).despawn_recursive();
+}
+
+fn change_color(
+    time: Res<Time>,
+    mut assets: ResMut<Assets<ColorMaterial>>,
+    query: Query<&Handle<ColorMaterial>, With<Sprite>>,
+) {
+    for handle in query.iter() {
+        let material = assets.get_mut(handle).unwrap();
+        material
+            .color
+            .set_b((time.seconds_since_startup() * 5.0).sin() as f32 + 2.0);
+    }
 }
 
 // This system updates the score for each entity with the "Player" and "Score" component.
@@ -138,7 +220,7 @@ fn score_system(mut query: Query<(&Player, &mut Score)>) {
 }
 
 // Scaling sprites
-fn size_scaling(windows: Res<Windows>, mut q: Query<(&Size, &mut Sprite)>) {
+fn size_scaling(windows: Res<Windows>, mut q: Query<(&BoxSize, &mut Sprite)>) {
     let window = windows.get_primary().unwrap();
     for (sprite_size, mut sprite) in q.iter_mut() {
         sprite.size = Vec2::new(
@@ -277,7 +359,7 @@ fn spawn_player(
             })
             .insert(PlayerSegment)
             .insert(Position { x: 3, y: 3 })
-            .insert(Size::square(0.8))
+            .insert(BoxSize::square(0.8))
             .id(),
         spawn_segment(
             commands,
@@ -379,7 +461,7 @@ fn spawn_segment(
         })
         .insert(PlayerSegment)
         .insert(position)
-        .insert(Size::square(0.65))
+        .insert(BoxSize::square(0.65))
         .id()
 }
 
@@ -397,30 +479,6 @@ fn game_over(
         }
         spawn_player(commands, materials, segments_res); // Before this line delete the player trail
     }
-}
-
-// Sometimes systems need their own unique "local" state. Bevy's ECS provides Local<T> resources for
-// this case. Local<T> resources are unique to their system and are automatically initialized on
-// your behalf (if they don't already exist). If you have a system's id, you can also access local
-// resources directly in the Resources collection using `Resources::get_local()`. In general you
-// should only need this feature in the following cases:  1. You have multiple instances of the same
-// system and they each need their own unique state  2. You already have a global version of a
-// resource that you don't want to overwrite for your current system  3. You are too lazy to
-// register the system's resource as a global resource
-
-#[derive(Default)]
-struct State {
-	counter: usize,
-}
-
-// NOTE: this doesn't do anything relevant to our game, it is just here for illustrative purposes
-#[allow(dead_code)]
-fn local_state_system(mut state: Local<State>, query: Query<(&Player, &Score)>) {
-	for (player, score) in query.iter() {
-		println!("processed: {} {}", player.name, score.value);
-	}
-	println!("this system ran {} times", state.counter);
-	state.counter += 1;
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
@@ -441,13 +499,12 @@ fn main() {
 	App::build()
 		// Resize and rename window
 		.insert_resource(WindowDescriptor { // <--
-            title: "Nuisance Value".to_string(), // <--
-            width: 500.0,                 // <--
-            height: 500.0,                // <--
-            ..Default::default()         // <--
-        })
-		// Resources can be added to our app like this
-		.insert_resource(State { counter: 0 })
+			title: "Nuisance Value".to_string(), // <--
+			width: 500.0,                 // <--
+			height: 500.0,                // <--
+			..Default::default()         // <--
+		})
+		.add_state(AppState::MainMenu)
 		// Change colors
 		.insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
 		// Player tails
@@ -541,6 +598,7 @@ fn main() {
 				.before(PlayerMovement::Movement),
 		)
 		.add_system(game_over.system().before(PlayerMovement::Movement))
+		/*
 		.add_system_set(
 			SystemSet::new()
 				.with_run_criteria(FixedTimestep::step(0.150))
@@ -552,14 +610,34 @@ fn main() {
 						.after(PlayerMovement::Movement),
 				)
 		)
+		*/
 		.add_system_set_to_stage(
 			CoreStage::PostUpdate,
 			SystemSet::new()
 				.with_system(position_translation.system())
 				.with_system(size_scaling.system()),
 		)
-		.add_plugins(DefaultPlugins)
+		.add_system_set(SystemSet::on_enter(AppState::MainMenu).with_system(setup_menu.system()))
+        .add_system_set(SystemSet::on_update(AppState::MainMenu).with_system(menu.system()))
+        .add_system_set(SystemSet::on_exit(AppState::MainMenu).with_system(cleanup_menu.system()))
+        .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(startup_system.system()))
+        .add_system_set(
+            SystemSet::on_update(AppState::InGame)
+				.with_run_criteria(FixedTimestep::step(0.150))
+				.with_system(player_movement.system().label(PlayerMovement::Movement))
+				.with_system(
+					player_growth
+						.system()
+						.label(PlayerMovement::Growth)
+						.after(PlayerMovement::Movement),
+				)
+        )
+		.add_system_set(
+            SystemSet::on_update(AppState::MainMenu)
+				.with_system(change_color.system()),
+        )
 		.insert_resource(ReportExecutionOrderAmbiguities)
+		.add_plugins(DefaultPlugins)
 		// This call to run() starts the app we just built!
 		.run();
 }
