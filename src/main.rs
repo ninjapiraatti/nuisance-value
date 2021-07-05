@@ -174,7 +174,7 @@ fn menu(
                 state.set(AppState::InGame).unwrap();
             }
             Interaction::Hovered => {
-				println!("hovered");
+				println!("{:?}", state.current());
             }
             Interaction::None => {
                 println!("hovered");
@@ -370,7 +370,7 @@ fn spawn_player(
 }
 
 // Move player
-fn player_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&mut PlayerHead>) {
+fn player_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&mut PlayerHead>, state: ResMut<State<AppState>>,) {
     if let Some(mut head) = heads.iter_mut().next() {
         let dir: Direction = if keyboard_input.pressed(KeyCode::Left) {
             Direction::Left
@@ -387,6 +387,7 @@ fn player_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&
             head.direction = dir;
         }
     }
+	println!("{:?}", state.current());
 }
 
 fn player_movement(
@@ -521,13 +522,13 @@ fn main() {
 		.init_resource::<GameState>()
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
-		.add_startup_system(startup_system.system())
+		//.add_startup_system(startup_system.system())
 		// Add Player death
 		.add_event::<GameOverEvent>()
 		// Add tail event
 		.add_event::<GrowthEvent>()
 		// Add game setup to stage
-		.add_startup_stage("game_setup", SystemStage::single(spawn_player.system()))
+		//.add_startup_stage("game_setup", SystemStage::single(spawn_player.system()))
 		// SYSTEM EXECUTION ORDER
 		//
 		// Each system belongs to a `Stage`, which controls the execution strategy and broad order
@@ -583,58 +584,53 @@ fn main() {
 		// We can ensure that game_over system runs after score_check_system using explicit ordering
 		// constraints First, we label the system we want to refer to using `.label`
 		// Then, we use either `.before` or `.after` to describe the order we want the relationship
+		/*
 		.add_system_to_stage(
 			MyStage::AfterRound,
 			score_check_system.system().label(MyLabels::ScoreCheck),
-		)
+		)*/
+		/*
 		.add_system_to_stage(
 			MyStage::AfterRound,
 			game_over_system.system().after(MyLabels::ScoreCheck),
-		)
-		.add_system(
-			player_movement_input
-				.system()
-				.label(PlayerMovement::Input)
-				.before(PlayerMovement::Movement),
-		)
-		.add_system(game_over.system().before(PlayerMovement::Movement))
-		/*
+		)*/
+		//.add_system(game_over.system().before(PlayerMovement::Movement))
 		.add_system_set(
-			SystemSet::new()
-				.with_run_criteria(FixedTimestep::step(0.150))
-				.with_system(player_movement.system().label(PlayerMovement::Movement))
-				.with_system(
-					player_growth
-						.system()
-						.label(PlayerMovement::Growth)
-						.after(PlayerMovement::Movement),
-				)
+			SystemSet::on_enter(AppState::MainMenu)
+				.with_system(startup_system.system())
+				.with_system(setup_menu.system())
+				//.with_system(position_translation.system())
+				//.with_system(size_scaling.system())
 		)
-		*/
-		.add_system_set_to_stage(
-			CoreStage::PostUpdate,
-			SystemSet::new()
-				.with_system(position_translation.system())
-				.with_system(size_scaling.system()),
-		)
-		.add_system_set(SystemSet::on_enter(AppState::MainMenu).with_system(setup_menu.system()))
         .add_system_set(SystemSet::on_update(AppState::MainMenu).with_system(menu.system()))
         .add_system_set(SystemSet::on_exit(AppState::MainMenu).with_system(cleanup_menu.system()))
-        .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(startup_system.system()))
+        .add_system_set(SystemSet::on_enter(AppState::InGame).with_system(spawn_player.system()))
+		/*
+		.add_system_set_to_stage(
+			CoreStage::PostUpdate,
+			SystemSet::on_enter(AppState::InGame)
+				.with_system(position_translation.system())
+				.with_system(size_scaling.system())
+				.with_system(spawn_player.system())
+		)*/
         .add_system_set(
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
-				.with_system(player_movement.system().label(PlayerMovement::Movement))
+				/*
 				.with_system(
 					player_growth
-						.system()
-						.label(PlayerMovement::Growth)
-						.after(PlayerMovement::Movement),
+					.system()
+					.label(PlayerMovement::Growth)
+					.after(PlayerMovement::Movement),
 				)
-        )
-		.add_system_set(
-            SystemSet::on_update(AppState::MainMenu)
-				.with_system(change_color.system()),
+				.with_system(
+					player_movement_input
+					.system()
+					.label(PlayerMovement::Input)
+					.before(PlayerMovement::Movement),
+				)*/
+				//.with_system(player_movement.system().label(PlayerMovement::Movement))
+
         )
 		.insert_resource(ReportExecutionOrderAmbiguities)
 		.add_plugins(DefaultPlugins)
