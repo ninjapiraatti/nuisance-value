@@ -128,7 +128,8 @@ fn setup_menu(
     asset_server: Res<AssetServer>,
 ) {
     // ui camera
-    commands.spawn_bundle(UiCameraBundle::default());
+	commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    //commands.spawn_bundle(UiCameraBundle::default());
     let button_entity = commands
         .spawn_bundle(ButtonBundle {
             style: Style {
@@ -222,6 +223,7 @@ fn score_system(mut query: Query<(&Player, &mut Score)>) {
 
 // Scaling sprites
 fn size_scaling(windows: Res<Windows>, mut q: Query<(&BoxSize, &mut Sprite)>) {
+	println!("\n\nIN THE SCALING\n\n");
     let window = windows.get_primary().unwrap();
     for (sprite_size, mut sprite) in q.iter_mut() {
         sprite.size = Vec2::new(
@@ -236,6 +238,7 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
         let tile_size = bound_window / bound_game;
         pos / bound_game * bound_window - (bound_window / 2.) + (tile_size / 2.)
     }
+	println!("\n\nIN THE POSITION TRANSLATION\n\n");
     let window = windows.get_primary().unwrap();
     for (pos, mut transform) in q.iter_mut() {
         transform.translation = Vec3::new(
@@ -309,7 +312,7 @@ fn startup_system(
 		),
 	]);
 	// Create a camera
-	commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+	//commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 	commands.insert_resource(Materials {
         head_material: materials.add(Color::rgb(0.1, 0.9, 0.9).into()),
 		segment_material: materials.add(Color::rgb(0.1, 0.7, 0.7).into())
@@ -348,6 +351,7 @@ fn spawn_player(
     materials: Res<Materials>,
     mut segments: ResMut<PlayerSegments>,
 ) {
+	println!("\n\nIN SPAWN\n\n");
     segments.0 = vec![
         commands
             .spawn_bundle(SpriteBundle {
@@ -368,6 +372,7 @@ fn spawn_player(
             Position { x: 3, y: 2 },
         ),
     ];
+	println!("\n\n{:?}\n\n", segments.0);
 }
 
 // Move player
@@ -499,6 +504,8 @@ fn main() {
 	// Bevy apps are created using the builder pattern. We use the builder to add systems,
 	// resources, and plugins to our app
 	App::build()
+		.insert_resource(ReportExecutionOrderAmbiguities)
+		.add_plugins(DefaultPlugins)
 		// Resize and rename window
 		.insert_resource(WindowDescriptor { // <--
 			title: "Nuisance Value".to_string(), // <--
@@ -513,17 +520,17 @@ fn main() {
 		.insert_resource(PlayerSegments::default())
 		.insert_resource(LastTailPosition::default())
 		// Some systems are configured by adding their settings as a resource
-		.insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
+		//.insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs(5)))
 		// Plugins are just a grouped set of app builder calls (just like we're doing here).
 		// We could easily turn our game into a plugin, but you can check out the plugin example for
 		// that :) The plugin below runs our app's "system schedule" once every 5 seconds
 		// (configured above).
-		.add_plugin(ScheduleRunnerPlugin::default())
+		//.add_plugin(ScheduleRunnerPlugin::default())
 		// Resources that implement the Default or FromResources trait can be added like this:
 		.init_resource::<GameState>()
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
-		//.add_startup_system(startup_system.system())
+		.add_startup_system(startup_system.system())
 		// Add Player death
 		.add_event::<GameOverEvent>()
 		// Add tail event
@@ -598,23 +605,8 @@ fn main() {
 		//.add_system(game_over.system().before(PlayerMovement::Movement))
 		.add_system_set(
 			SystemSet::on_enter(AppState::MainMenu)
-				.with_system(startup_system.system())
+				//.with_system(startup_system.system())
 				.with_system(setup_menu.system())
-		)
-        .add_system_set(
-			SystemSet::on_update(AppState::MainMenu)
-				.with_system(menu.system())
-				//.before(PlayerMovement::Movement)
-				.before(PlayerMovement::Input)
-		)
-        .add_system_set(
-			SystemSet::on_exit(AppState::MainMenu)
-				.with_system(cleanup_menu.system())
-		)
-        .add_system_set(
-			SystemSet::on_enter(AppState::InGame)
-				//.with_system(position_translation.system())
-				//.with_system(size_scaling.system())
 				.with_system(
 					spawn_player
 					.system()
@@ -623,13 +615,29 @@ fn main() {
 				)
 		)
         .add_system_set(
+			SystemSet::on_update(AppState::MainMenu)
+				.with_system(menu.system())
+				.before(PlayerMovement::Movement)
+				.before(PlayerMovement::Input)
+		)
+        .add_system_set(
+			SystemSet::on_exit(AppState::MainMenu)
+				.with_system(cleanup_menu.system())
+		)
+        .add_system_set(
+			SystemSet::on_enter(AppState::InGame)
+				.with_system(position_translation.system())
+				.with_system(size_scaling.system())
+		)
+        .add_system_set(
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
 				.with_system(
 					player_growth
 					.system()
 					.label(PlayerMovement::Growth)
-					.after(PlayerMovement::Movement),
+					.after(PlayerMovement::Movement)
+					.after(PlayerMovement::Spawn),
 				)
 				.with_system(
 					player_movement_input
@@ -637,17 +645,18 @@ fn main() {
 					.label(PlayerMovement::Input)
 					.before(PlayerMovement::Movement),
 				)
-				.with_system(player_movement.system().label(PlayerMovement::Movement))
-
-        )
+				.with_system(
+					player_movement.system()
+					.label(PlayerMovement::Movement)
+					.after(PlayerMovement::Spawn)
+				)
+        )/*
 		.add_system_set_to_stage(
 			CoreStage::PostUpdate,
             SystemSet::on_update(AppState::InGame)
 				.with_system(position_translation.system())
 				.with_system(size_scaling.system())
-        )
-		.insert_resource(ReportExecutionOrderAmbiguities)
-		.add_plugins(DefaultPlugins)
+        )*/
 		// This call to run() starts the app we just built!
 		.run();
 }
