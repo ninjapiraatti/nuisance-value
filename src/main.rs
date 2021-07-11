@@ -16,7 +16,7 @@ struct Player {
 	name: String,
 	head: PlayerHead,
 }
-#[derive(Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 struct Position {
     x: i32,
     y: i32,
@@ -86,7 +86,7 @@ struct GameState {
 	winning_player: Option<String>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(SystemLabel, Debug, Clone, Eq, PartialEq, Hash)]
 enum AppState {
 	MainMenu,
 	InGame,
@@ -443,7 +443,7 @@ fn player_growth(
     mut segments: ResMut<PlayerSegments>,
     materials: Res<Materials>,
 ) {
-
+	//println!("\n{:?}\n", head_positions);
 	segments.0.push(spawn_segment( // This would add the tail always to the same player
 		commands,
 		&materials.segment_material,
@@ -596,17 +596,27 @@ fn main() {
 			game_over_system.system().after(MyLabels::ScoreCheck),
 		)*/
 		//.add_system(game_over.system().before(PlayerMovement::Movement))
-		.add_system_set(
+		.add_system_set_to_stage(
+			CoreStage::PreUpdate,
 			SystemSet::on_enter(AppState::MainMenu)
-				.with_system(startup_system.system())
-				.with_system(setup_menu.system())
+				.with_system(startup_system.system().label(AppState::MainMenu))
+				.with_system(setup_menu.system().label(AppState::MainMenu))
+		)
+        .add_system_set_to_stage(
+			CoreStage::PreUpdate,
+			SystemSet::on_update(AppState::MainMenu)
+				.with_system(menu.system().label(AppState::MainMenu))
+		)
+        .add_system_set_to_stage(
+			CoreStage::PreUpdate,
+			SystemSet::on_exit(AppState::MainMenu)
+				.with_system(cleanup_menu.system().label(AppState::MainMenu))
+		)
+        .add_system_set_to_stage(
+			CoreStage::Update,
+			SystemSet::on_enter(AppState::InGame)
 				.with_system(position_translation.system())
 				.with_system(size_scaling.system())
-		)
-        .add_system_set(SystemSet::on_update(AppState::MainMenu).with_system(menu.system()))
-        .add_system_set(SystemSet::on_exit(AppState::MainMenu).with_system(cleanup_menu.system()))
-        .add_system_set(
-			SystemSet::on_enter(AppState::InGame)
 				.with_system(
 					spawn_player
 					.system()
@@ -614,15 +624,8 @@ fn main() {
 					.before(PlayerMovement::Movement)
 				)
 		)
-		/*
-		.add_system_set_to_stage(
+        .add_system_set_to_stage(
 			CoreStage::PostUpdate,
-			SystemSet::on_enter(AppState::InGame)
-				.with_system(position_translation.system())
-				.with_system(size_scaling.system())
-				.with_system(spawn_player.system())
-		)*/
-        .add_system_set(
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
 				.with_system(
