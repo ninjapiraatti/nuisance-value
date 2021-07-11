@@ -63,6 +63,14 @@ pub enum PlayerMovement {
 	Spawn,
 }
 
+#[derive(SystemLabel, Debug, Clone, Eq, PartialEq, Hash)]
+enum AppState {
+	MainMenu,
+	InGame,
+	Paused,
+	GameOver
+}
+
 impl Direction {
     fn opposite(self) -> Self {
         match self {
@@ -84,14 +92,6 @@ struct GameState {
 	current_round: usize,
 	total_players: usize,
 	winning_player: Option<String>,
-}
-
-#[derive(SystemLabel, Debug, Clone, Eq, PartialEq, Hash)]
-enum AppState {
-	MainMenu,
-	InGame,
-	Paused,
-	GameOver
 }
 
 struct PlayerHead {
@@ -597,26 +597,28 @@ fn main() {
 		)*/
 		//.add_system(game_over.system().before(PlayerMovement::Movement))
 		.add_system_set_to_stage(
-			CoreStage::PreUpdate,
+			CoreStage::Update,
 			SystemSet::on_enter(AppState::MainMenu)
-				.with_system(startup_system.system().label(AppState::MainMenu))
-				.with_system(setup_menu.system().label(AppState::MainMenu))
+				.with_system(startup_system.system())
+				.with_system(setup_menu.system())
 		)
         .add_system_set_to_stage(
-			CoreStage::PreUpdate,
+			CoreStage::Update,
 			SystemSet::on_update(AppState::MainMenu)
-				.with_system(menu.system().label(AppState::MainMenu))
+				.with_system(menu.system())
+				//.before(PlayerMovement::Movement)
+				.before(PlayerMovement::Input)
 		)
         .add_system_set_to_stage(
-			CoreStage::PreUpdate,
+			CoreStage::Update,
 			SystemSet::on_exit(AppState::MainMenu)
-				.with_system(cleanup_menu.system().label(AppState::MainMenu))
+				.with_system(cleanup_menu.system())
 		)
         .add_system_set_to_stage(
 			CoreStage::Update,
 			SystemSet::on_enter(AppState::InGame)
-				.with_system(position_translation.system())
-				.with_system(size_scaling.system())
+				//.with_system(position_translation.system())
+				//.with_system(size_scaling.system())
 				.with_system(
 					spawn_player
 					.system()
@@ -625,7 +627,7 @@ fn main() {
 				)
 		)
         .add_system_set_to_stage(
-			CoreStage::PostUpdate,
+			CoreStage::Update,
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
 				.with_system(
@@ -642,6 +644,12 @@ fn main() {
 				)
 				.with_system(player_movement.system().label(PlayerMovement::Movement))
 
+        )
+		.add_system_set_to_stage(
+			CoreStage::PostUpdate,
+            SystemSet::on_update(AppState::InGame)
+				.with_system(position_translation.system())
+				.with_system(size_scaling.system())
         )
 		.insert_resource(ReportExecutionOrderAmbiguities)
 		.add_plugins(DefaultPlugins)
