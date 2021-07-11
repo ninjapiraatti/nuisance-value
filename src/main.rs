@@ -126,6 +126,7 @@ fn new_round_system(game_rules: Res<GameRules>, mut game_state: ResMut<GameState
 fn setup_menu(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+	mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     // ui camera
 	commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -161,6 +162,10 @@ fn setup_menu(
         })
         .id();
     commands.insert_resource(MenuData { button_entity });
+	commands.insert_resource(Materials {
+        head_material: materials.add(Color::rgb(0.1, 0.9, 0.9).into()),
+		segment_material: materials.add(Color::rgb(0.1, 0.7, 0.7).into())
+    });
 }
 
 fn menu(
@@ -223,7 +228,6 @@ fn score_system(mut query: Query<(&Player, &mut Score)>) {
 
 // Scaling sprites
 fn size_scaling(windows: Res<Windows>, mut q: Query<(&BoxSize, &mut Sprite)>) {
-	println!("\n\nIN THE SCALING\n\n");
     let window = windows.get_primary().unwrap();
     for (sprite_size, mut sprite) in q.iter_mut() {
         sprite.size = Vec2::new(
@@ -238,7 +242,6 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
         let tile_size = bound_window / bound_game;
         pos / bound_game * bound_window - (bound_window / 2.) + (tile_size / 2.)
     }
-	println!("\n\nIN THE POSITION TRANSLATION\n\n");
     let window = windows.get_primary().unwrap();
     for (pos, mut transform) in q.iter_mut() {
         transform.translation = Vec3::new(
@@ -313,10 +316,11 @@ fn startup_system(
 	]);
 	// Create a camera
 	//commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+	/*
 	commands.insert_resource(Materials {
         head_material: materials.add(Color::rgb(0.1, 0.9, 0.9).into()),
 		segment_material: materials.add(Color::rgb(0.1, 0.7, 0.7).into())
-    });
+    });*/
 	game_state.total_players = 2;
 }
 
@@ -351,7 +355,7 @@ fn spawn_player(
     materials: Res<Materials>,
     mut segments: ResMut<PlayerSegments>,
 ) {
-	println!("\n\nIN SPAWN\n\n");
+	println!("\n\nSPAWN\n\n");
     segments.0 = vec![
         commands
             .spawn_bundle(SpriteBundle {
@@ -372,7 +376,6 @@ fn spawn_player(
             Position { x: 3, y: 2 },
         ),
     ];
-	println!("\n\n{:?}\n\n", segments.0);
 }
 
 // Move player
@@ -448,7 +451,7 @@ fn player_growth(
     mut segments: ResMut<PlayerSegments>,
     materials: Res<Materials>,
 ) {
-	//println!("\n{:?}\n", head_positions);
+	println!("\n\nIN GROWTH\n\n");
 	segments.0.push(spawn_segment( // This would add the tail always to the same player
 		commands,
 		&materials.segment_material,
@@ -530,7 +533,7 @@ fn main() {
 		.init_resource::<GameState>()
 		// Startup systems run exactly once BEFORE all other systems. These are generally used for
 		// app initialization code (ex: adding entities and resources)
-		.add_startup_system(startup_system.system())
+		//.add_startup_system(startup_system.system())
 		// Add Player death
 		.add_event::<GameOverEvent>()
 		// Add tail event
@@ -607,12 +610,6 @@ fn main() {
 			SystemSet::on_enter(AppState::MainMenu)
 				//.with_system(startup_system.system())
 				.with_system(setup_menu.system())
-				.with_system(
-					spawn_player
-					.system()
-					.label(PlayerMovement::Spawn)
-					.before(PlayerMovement::Movement)
-				)
 		)
         .add_system_set(
 			SystemSet::on_update(AppState::MainMenu)
@@ -626,12 +623,20 @@ fn main() {
 		)
         .add_system_set(
 			SystemSet::on_enter(AppState::InGame)
-				.with_system(position_translation.system())
-				.with_system(size_scaling.system())
+				.with_system(
+					startup_system.system()
+					.before(PlayerMovement::Spawn)
+				)
+				.with_system(
+					spawn_player
+					.system()
+					.label(PlayerMovement::Spawn)
+					//.before(PlayerMovement::Movement)
+				)
 		)
         .add_system_set(
             SystemSet::on_update(AppState::InGame)
-				.with_run_criteria(FixedTimestep::step(0.150))
+				//.with_run_criteria(FixedTimestep::step(0.250))
 				.with_system(
 					player_growth
 					.system()
@@ -650,13 +655,8 @@ fn main() {
 					.label(PlayerMovement::Movement)
 					.after(PlayerMovement::Spawn)
 				)
-        )/*
-		.add_system_set_to_stage(
-			CoreStage::PostUpdate,
-            SystemSet::on_update(AppState::InGame)
 				.with_system(position_translation.system())
 				.with_system(size_scaling.system())
-        )*/
-		// This call to run() starts the app we just built!
+        )
 		.run();
 }
