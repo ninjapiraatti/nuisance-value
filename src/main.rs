@@ -149,7 +149,7 @@ fn setup_menu(
                 text: Text::with_section(
                     "Play",
                     TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font: asset_server.load("fonts/Chivo-Regular.ttf"),
                         font_size: 40.0,
                         color: Color::rgb(0.9, 0.9, 0.9),
                     },
@@ -596,26 +596,22 @@ fn main() {
 			game_over_system.system().after(MyLabels::ScoreCheck),
 		)*/
 		//.add_system(game_over.system().before(PlayerMovement::Movement))
-		.add_system_set_to_stage(
-			CoreStage::Update,
+		.add_system_set(
 			SystemSet::on_enter(AppState::MainMenu)
 				.with_system(startup_system.system())
 				.with_system(setup_menu.system())
 		)
-        .add_system_set_to_stage(
-			CoreStage::Update,
+        .add_system_set(
 			SystemSet::on_update(AppState::MainMenu)
 				.with_system(menu.system())
 				//.before(PlayerMovement::Movement)
 				.before(PlayerMovement::Input)
 		)
-        .add_system_set_to_stage(
-			CoreStage::Update,
+        .add_system_set(
 			SystemSet::on_exit(AppState::MainMenu)
 				.with_system(cleanup_menu.system())
 		)
-        .add_system_set_to_stage(
-			CoreStage::Update,
+        .add_system_set(
 			SystemSet::on_enter(AppState::InGame)
 				//.with_system(position_translation.system())
 				//.with_system(size_scaling.system())
@@ -626,8 +622,7 @@ fn main() {
 					.before(PlayerMovement::Movement)
 				)
 		)
-        .add_system_set_to_stage(
-			CoreStage::Update,
+        .add_system_set(
             SystemSet::on_update(AppState::InGame)
 				.with_run_criteria(FixedTimestep::step(0.150))
 				.with_system(
