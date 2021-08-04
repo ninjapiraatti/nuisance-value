@@ -484,6 +484,7 @@ fn game_over(
     segments: Query<Entity, With<PlayerSegment>>,
 ) {
     if reader.iter().next().is_some() {
+		println!("Game over!");
 		for ent in players.iter().chain(segments.iter()) {
             commands.entity(ent).despawn();
         }
@@ -605,7 +606,6 @@ fn main() {
 			MyStage::AfterRound,
 			game_over_system.system().after(MyLabels::ScoreCheck),
 		)*/
-		//.add_system(game_over.system().before(PlayerMovement::Movement))
 		.add_system_set(
 			SystemSet::on_enter(AppState::MainMenu)
 				//.with_system(startup_system.system())
@@ -654,6 +654,11 @@ fn main() {
 					player_movement.system()
 					.label(PlayerMovement::Movement)
 					.after(PlayerMovement::Spawn)
+				)
+				.with_system(
+					game_over
+					.system()
+					.before(PlayerMovement::Movement)
 				)
 				.with_system(position_translation.system())
 				.with_system(size_scaling.system())
